@@ -1,16 +1,91 @@
-services:
-  db:
-    image: mysql:8.0
-    container_name: mysql-dev
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root1321
-      MYSQL_DATABASE: WinderDb
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+# docker-compose.yml - оркестрация контейнеров
 
+# Список сервисов (контейнеров) которые будут запущены
+services:
+  # ============================================
+  # БАЗА ДАННЫХ 1: СПРАВОЧНИКИ (ТОЛЬКО ЧТЕНИЕ)
+  # ============================================
+  db-reference:
+    # Используем официальный образ MySQL 8.0
+    image: mysql:8.0
+    # Имя контейнера (чтобы к нему обращаться из других контейнеров)
+    container_name: mysql-reference
+    # Автоматически перезапускать контейнер если упал
+    restart: always
+    
+    # Переменные окружения для MySQL
+    environment:
+      # Пароль для root пользователя (внутри контейнера)
+      MYSQL_ROOT_PASSWORD: root123
+      # Имя базы данных которая создастся автоматически
+      MYSQL_DATABASE: ReferenceDb
+      # Пользователь с правами только на чтение (создадим позже)
+      MYSQL_USER: readonly
+      MYSQL_PASSWORD: readonly123
+    
+    # Проброс портов (хост:контейнер)
+    # 3307 на хосте -> 3306 внутри контейнера (чтобы не конфликтовать с локальным MySQL)
+    ports:
+      - "3307:3306"
+    
+    # Тома (папки) для хранения данных вне контейнера
+    volumes:
+      # Данные базы (чтобы не терялись при перезапуске)
+      - mysql-reference-data:/var/lib/mysql
+      # Скрипт инициализации (выполнится при первом запуске)
+      - ./init-reference.sql:/docker-entrypoint-initdb.d/init.sql
+    
+    # Проверка здоровья контейнера (ждем пока MySQL запустится)
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # БАЗА ДАННЫХ 2: ОПЕРАТИВНЫЕ ДАННЫЕ (ПОЛНЫЙ ДОСТУП)
+  # ============================================
+  db-app:
+    image: mysql:8.0
+    container_name: mysql-app
+    restart: always
+    
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: AppDb
+      # Для оперативной БД не создаем readonly пользователя
+    
+    ports:
+      - "3308:3306"  # Другой порт на хосте
+    
+    volumes:
+      - mysql-app-data:/var/lib/mysql
+      - ./init-app.sql:/docker-entrypoint-initdb.d/init.sql
+    
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      timeout: 10s
+      retries: 5
+
+# ============================================
+# БЭКЕНД (ASP.NET Core) - ПОКА НЕ ДОБАВЛЯЕМ, ПОТОМ
+# ============================================
+  # backend:
+  #   build: ./BackendWinder
+  #   container_name: backend-api
+  #   ports:
+  #     - "5000:8080"
+  #   depends_on:
+  #     - db-reference
+  #     - db-app
+  #   environment:
+  #     - ConnectionStrings__ReferenceDb=Server=db-reference;Port=3306;Database=ReferenceDb;Uid=root;Pwd=root123;
+  #     - ConnectionStrings__AppDb=Server=db-app;Port=3306;Database=AppDb;Uid=root;Pwd=root123;
+
+# ============================================
+# ФРОНТЕНД (Vue.js) - ПОКА НЕ ДОБАВЛЯЕМ, ПОТОМ
+# ============================================
+
+# Объявление томов (чтобы Docker управлял ими)
 volumes:
-  mysql-data:
+  mysql-reference-data:
+  mysql-app-data:
