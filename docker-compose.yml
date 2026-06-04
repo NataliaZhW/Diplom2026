@@ -1,0 +1,16 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: mysql-dev
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root1321
+      MYSQL_DATABASE: WinderDb
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  mysql-data:
