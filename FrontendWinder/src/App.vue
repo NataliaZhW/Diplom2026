@@ -1,17 +1,23 @@
 <template>
-  <router-view />
+  <div id="app">
+    <Navbar v-if="authStore.isAuthenticated" />
+    <router-view />
+  </div>
 </template>
 
-<script>
-import { useAuthStore } from '@/stores/auth';
+<script setup>
+import { onMounted } from 'vue'
+import { useAuthStore } from './store/auth'
+import Navbar from './components/Navbar.vue'
 
-export default {
-  name: 'App',
-  mounted() {
-    const authStore = useAuthStore();
-    authStore.init();
+const authStore = useAuthStore()
+
+onMounted(() => {
+  // Проверяем, есть ли сохраненный токен
+  if (localStorage.getItem('token')) {
+    authStore.isAuthenticated = true
   }
-};
+})
 </script>
 
 <style>
@@ -22,6 +28,11 @@ export default {
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background-color: #f5f5f5;
+}
+
+#app {
+  min-height: 100vh;
 }
 </style>

@@ -1,194 +1,152 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using System.Threading.Tasks;  
 using BackendWinder.Data;
 using BackendWinder.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
-namespace BackendWinder
-{
-    public class Program
+var builder = WebApplication.CreateBuilder(args);
+
+// ============================================================
+// 1. Настройка подключения к базам данных
+// ============================================================
+
+// Подключение к db-outside (справочники)
+var outsideConnection = builder.Configuration.GetConnectionString("Outside");
+builder.Services.AddDbContext<OutsideContext>(options =>
+    options.UseMySql(outsideConnection, ServerVersion.AutoDetect(outsideConnection))
+);
+
+// Подключение к db-winder (оперативные данные)
+var winderConnection = builder.Configuration.GetConnectionString("Winder");
+builder.Services.AddDbContext<WinderContext>(options =>
+    options.UseMySql(winderConnection, ServerVersion.AutoDetect(winderConnection))
+);
+
+// ============================================================
+// 2. Настройка JWT авторизации
+// ============================================================
+
+var jwtSecret = builder.Configuration["JWT:Secret"] 
+    ?? throw new Exception("JWT Secret not configured");
+var jwtIssuer = builder.Configuration["JWT:Issuer"] 
+    ?? throw new Exception("JWT Issuer not configured");
+var jwtAudience = builder.Configuration["JWT:Audience"] 
+    ?? throw new Exception("JWT Audience not configured");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        public static async Task Main(string[] args)
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            var builder = WebApplication.CreateBuilder(args);
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+        };
+    });
 
-            // ================================================
-            // 1. НАСТРОЙКА ПОДКЛЮЧЕНИЯ К БАЗАМ ДАННЫХ
-            // ================================================
+builder.Services.AddAuthorization();
 
-            // Получаем строки подключения из appsettings.json
-            var referenceConnectionString = builder.Configuration.GetConnectionString("ReferenceDb");
-            var appConnectionString = builder.Configuration.GetConnectionString("AppDb");
+// ============================================================
+// 3. Регистрация своих сервисов
+// ============================================================
 
-            // Регистрируем контекст для справочной БД (только чтение)
-            builder.Services.AddDbContext<ReferenceDbContext>(options =>
-                options.UseMySql(referenceConnectionString,
-                    ServerVersion.AutoDetect(referenceConnectionString)));
+builder.Services.AddScoped<JwtService>();
 
-            // Регистрируем контекст для оперативной БД (полный доступ)
-            builder.Services.AddDbContext<AppDbContext>(options =>
-                options.UseMySql(appConnectionString,
-                    ServerVersion.AutoDetect(appConnectionString)));
+// ============================================================
+// 4. Настройка CORS (разрешаем запросы с фронтенда)
+// ============================================================
 
-            // ================================================
-            // 2. НАСТРОЙКА IDENTITY
-            // ================================================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:8080", "http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
-            // Добавляем Identity с нашим расширенным пользователем ApplicationUser
-            builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-                .AddEntityFrameworkStores<AppDbContext>()  // Храним данные пользователей в AppDb
-                .AddDefaultTokenProviders();               // Для сброса пароля (если понадобится)
+// ============================================================
+// 5. Настройка контроллеров и Swagger
+// ============================================================
 
-            // ================================================
-            // 3. НАСТРОЙКА JWT АУТЕНТИФИКАЦИИ
-            // ================================================
+builder.Services.AddControllers();
 
-            // Получаем настройки JWT из appsettings.json
-            var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new Exception("JWT Key not configured");
-            var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new Exception("JWT Issuer not configured");
-            var jwtAudience = builder.Configuration["Jwt:Audience"] ?? throw new Exception("JWT Audience not configured");
-            var jwtExpiryMinutes = int.Parse(builder.Configuration["Jwt:ExpiryMinutes"] ?? "1440");
+// Настройка Swagger с поддержкой JWT
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo 
+    { 
+        Title = "Diplom_Winder API", 
+        Version = "v1",
+        Description = "API для управления заданиями мотальщиков"
+    });
 
-            // Преобразуем ключ в байты для подписи
-            var key = Encoding.UTF8.GetBytes(jwtKey);
+    // Добавляем возможность авторизации в Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Введите JWT токен: Bearer {токен}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
 
-            // Настраиваем аутентификацию через JWT Bearer
-            builder.Services.AddAuthentication(options =>
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
             {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(options =>
-            {
-                options.RequireHttpsMetadata = false;  // Для разработки (в продакшене нужно true)
-                options.SaveToken = true;
-                options.TokenValidationParameters = new TokenValidationParameters
+                Reference = new OpenApiReference
                 {
-                    ValidateIssuer = true,           // Проверяем издателя
-                    ValidateAudience = true,         // Проверяем получателя
-                    ValidateLifetime = true,         // Проверяем срок действия
-                    ValidateIssuerSigningKey = true, // Проверяем подпись
-                    ValidIssuer = jwtIssuer,
-                    ValidAudience = jwtAudience,
-                    IssuerSigningKey = new SymmetricSecurityKey(key)
-                };
-            });
-
-            // Добавляем авторизацию
-            builder.Services.AddAuthorization();
-
-            // ================================================
-            // 4. ДОБАВЛЯЕМ КОНТРОЛЛЕРЫ И SWAGGER
-            // ================================================
-
-            builder.Services.AddControllers();
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(c =>
-            {
-                c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "BackendWinder API", Version = "v1" });
-
-                // Настройка JWT для Swagger
-                c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-                {
-                    Name = "Authorization",
-                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-                    Scheme = "Bearer",
-                    BearerFormat = "JWT",
-                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-                    Description = "Введите токен в формате: eyJhbGciOiJIUzI1NiIs..."
-                });
-
-                c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-                {
-                    {
-                        new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-                        {
-                            Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                            {
-                                Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                                Id = "Bearer"
-                            }
-                        },
-                        new string[] {}
-                    }
-                });
-            });
-
-            // Регистрация JWT сервиса
-            builder.Services.AddScoped<JwtService>();
-
-            // ================================================
-            // 5. НАСТРОЙКА CORS (для Vue.js фронтенда)
-            // ================================================
-
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy("AllowVueFrontend", policy =>
-                {
-                    // Разрешаем запросы с localhost:5173 (Vite) и 5174 (альтернативный порт)
-                    policy.WithOrigins("http://localhost:5173", "http://localhost:5174")
-                          .AllowAnyHeader()
-                          .AllowAnyMethod()
-                          .AllowCredentials();  // Разрешаем отправку cookies (если понадобятся)
-                });
-            });
-
-            // ================================================
-            // 6. ПОСТРОЕНИЕ ПРИЛОЖЕНИЯ
-            // ================================================
-
-            var app = builder.Build();
-
-            // Настройка Swagger в режиме разработки
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
-
-            // Перенаправление HTTP на HTTPS (в разработке можно отключить)
-            // app.UseHttpsRedirection();
-
-            // Включаем CORS
-            app.UseCors("AllowVueFrontend");
-
-            // Включаем аутентификацию и авторизацию
-            app.UseAuthentication();
-            app.UseAuthorization();
-
-            // Маппинг контроллеров
-            app.MapControllers();
-
-            // ================================================
-            // 7. СОЗДАНИЕ БАЗЫ ДАННЫХ ПРИ ПЕРВОМ ЗАПУСКЕ
-            // ================================================
-
-            using (var scope = app.Services.CreateScope())
-            {
-                var appDbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-
-                // Создаем базу данных, если её нет
-                // Это создаст все таблицы: AspNetUsers, AspNetRoles, AssignedTasks, MaterialRequests, UserProfiles
-                appDbContext.Database.EnsureCreated();
-
-                // Создаем роли, если их нет
-
-                string[] roleNames = { "User", "Admin" };
-                foreach (var roleName in roleNames)
-                {
-                    if (!await roleManager.RoleExistsAsync(roleName))
-                    {
-                        await roleManager.CreateAsync(new IdentityRole(roleName));
-                    }
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
                 }
-            }
-
-            // Запуск приложения
-            app.Run();
+            },
+            Array.Empty<string>()
         }
-    }
+    });
+});
+
+// ============================================================
+// 6. Сборка приложения
+// ============================================================
+
+var app = builder.Build();
+
+// ============================================================
+// 7. Настройка middleware (порядок важен!)
+// ============================================================
+
+// Swagger (только в разработке)
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
+
+// Перенаправление на HTTPS
+app.UseHttpsRedirection();
+
+// CORS (разрешаем запросы с фронтенда)
+app.UseCors("AllowFrontend");
+
+// Аутентификация и авторизация (порядок важен!)
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Контроллеры
+app.MapControllers();
+
+// ============================================================
+// 8. Запуск приложения
+// ============================================================
+
+app.Run();

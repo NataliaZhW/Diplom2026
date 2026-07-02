@@ -1,45 +1,57 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import LoginView from '../views/LoginView.vue';
-import RegisterView from '../views/RegisterView.vue';
-import HomeView from '../views/HomeView.vue';
-import { useAuthStore } from '@/stores/auth';
+import { createRouter, createWebHistory } from 'vue-router'
+import Login from '../views/Login.vue'
+import Colors from '../views/Colors.vue'
+import Brands from '../views/Brands.vue'
+import Users from '../views/Users.vue'
+
+const routes = [
+    {    
+        path: '/login',
+        name: 'Login',
+        component: Login,
+        meta: { requiresAuth: false }
+    },
+    {
+        path: '/',
+        redirect: '/colors'
+    },
+    {
+        path: '/colors',
+        name: 'Colors',
+        component: Colors,
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/brands',
+        name: 'Brands',
+        component: Brands,
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/users',
+        name: 'Users',
+        component: Users,
+        meta: { requiresAuth: true, requiresMaster: true }
+    }
+]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: '/login',
-      name: 'login',
-      component: LoginView,
-      meta: { requiresGuest: true }
-    },
-    {
-      path: '/register',
-      name: 'register',
-      component: RegisterView,
-      meta: { requiresGuest: true }
-    },
-    {
-      path: '/',
-      name: 'home',
-      component: HomeView,
-      meta: { requiresAuth: true }
-    }
-  ]
-});
+    history: createWebHistory(),
+    routes
+})
 
-// Защита маршрутов
+// Guard: проверка авторизации
 router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore();
-  const isAuthenticated = authStore.isAuthenticated;
-  
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    next('/login');
-  } else if (to.meta.requiresGuest && isAuthenticated) {
-    next('/');
-  } else {
-    next();
-  }
-});
+    const token = localStorage.getItem('token')
+    const userRole = localStorage.getItem('userRole')
 
-export default router;
+    if (to.meta.requiresAuth && !token) {
+        next('/login')
+    } else if (to.meta.requiresMaster && userRole !== 'master') {
+        next('/colors')
+    } else {
+        next()
+    }
+})
+
+export default router

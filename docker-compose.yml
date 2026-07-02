@@ -1,91 +1,50 @@
-# docker-compose.yml - оркестрация контейнеров
+version: '3.8'
 
-# Список сервисов (контейнеров) которые будут запущены
 services:
-  # ============================================
-  # БАЗА ДАННЫХ 1: СПРАВОЧНИКИ (ТОЛЬКО ЧТЕНИЕ)
-  # ============================================
-  db-reference:
-    # Используем официальный образ MySQL 8.0
+  # ============================================================
+  # БАЗА ДАННЫХ 1: Справочники (только чтение)
+  # ============================================================
+  db-outside:
     image: mysql:8.0
-    # Имя контейнера (чтобы к нему обращаться из других контейнеров)
-    container_name: mysql-reference
-    # Автоматически перезапускать контейнер если упал
+    container_name: db_outside
     restart: always
-    
-    # Переменные окружения для MySQL
     environment:
-      # Пароль для root пользователя (внутри контейнера)
-      MYSQL_ROOT_PASSWORD: root123
-      # Имя базы данных которая создастся автоматически
-      MYSQL_DATABASE: ReferenceDb
-      # Пользователь с правами только на чтение (создадим позже)
-      MYSQL_USER: readonly
-      MYSQL_PASSWORD: readonly123
-    
-    # Проброс портов (хост:контейнер)
-    # 3307 на хосте -> 3306 внутри контейнера (чтобы не конфликтовать с локальным MySQL)
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: outside_db
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_outside_data:/var/lib/mysql
+      - ./init-scripts/01-outside.sql:/docker-entrypoint-initdb.d/01-outside.sql
+    networks:
+      - diplom_network
+
+  # ============================================================
+  # БАЗА ДАННЫХ 2: Оперативные данные (полный доступ)
+  # ============================================================
+  db-winder:
+    image: mysql:8.0
+    container_name: db_winder
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: winder_db
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3307:3306"
-    
-    # Тома (папки) для хранения данных вне контейнера
     volumes:
-      # Данные базы (чтобы не терялись при перезапуске)
-      - mysql-reference-data:/var/lib/mysql
-      # Скрипт инициализации (выполнится при первом запуске)
-      - ./init-reference.sql:/docker-entrypoint-initdb.d/init.sql
-    
-    # Проверка здоровья контейнера (ждем пока MySQL запустится)
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
-      timeout: 10s
-      retries: 5
+      - db_winder_data:/var/lib/mysql
+      - ./init-scripts/02-winder.sql:/docker-entrypoint-initdb.d/02-winder.sql
+    networks:
+      - diplom_network
 
-  # ============================================
-  # БАЗА ДАННЫХ 2: ОПЕРАТИВНЫЕ ДАННЫЕ (ПОЛНЫЙ ДОСТУП)
-  # ============================================
-  db-app:
-    image: mysql:8.0
-    container_name: mysql-app
-    restart: always
-    
-    environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: AppDb
-      # Для оперативной БД не создаем readonly пользователя
-    
-    ports:
-      - "3308:3306"  # Другой порт на хосте
-    
-    volumes:
-      - mysql-app-data:/var/lib/mysql
-      - ./init-app.sql:/docker-entrypoint-initdb.d/init.sql
-    
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
-      timeout: 10s
-      retries: 5
-
-# ============================================
-# БЭКЕНД (ASP.NET Core) - ПОКА НЕ ДОБАВЛЯЕМ, ПОТОМ
-# ============================================
-  # backend:
-  #   build: ./BackendWinder
-  #   container_name: backend-api
-  #   ports:
-  #     - "5000:8080"
-  #   depends_on:
-  #     - db-reference
-  #     - db-app
-  #   environment:
-  #     - ConnectionStrings__ReferenceDb=Server=db-reference;Port=3306;Database=ReferenceDb;Uid=root;Pwd=root123;
-  #     - ConnectionStrings__AppDb=Server=db-app;Port=3306;Database=AppDb;Uid=root;Pwd=root123;
-
-# ============================================
-# ФРОНТЕНД (Vue.js) - ПОКА НЕ ДОБАВЛЯЕМ, ПОТОМ
-# ============================================
-
-# Объявление томов (чтобы Docker управлял ими)
 volumes:
-  mysql-reference-data:
-  mysql-app-data:
+  db_outside_data:
+  db_winder_data:
+
+networks:
+  diplom_network:
+    driver: bridge
