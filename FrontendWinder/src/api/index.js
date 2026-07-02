@@ -9,34 +9,21 @@ const api = axios.create({
   }
 })
 
-// Добавляем лог для отладки
+// Перехватчик для добавления токена
 api.interceptors.request.use(
   (config) => {
-    console.log('=== ЗАПРОС ===')
-    console.log('URL:', config.url)
-    console.log('Метод:', config.method)
-    console.log('Данные:', config.data)
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
-  (error) => {
-    console.error('Ошибка запроса:', error)
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
 api.interceptors.response.use(
-  (response) => {
-    console.log('=== ОТВЕТ ===')
-    console.log('Статус:', response.status)
-    console.log('Данные:', response.data)
-    return response
-  },
+  (response) => response,
   (error) => {
-    console.error('Ошибка ответа:', error)
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('userRole')
@@ -48,6 +35,10 @@ api.interceptors.response.use(
 
 export default api
 
+// ============================================================
+// API методы
+// ============================================================
+
 export const authApi = {
   login: (login, password) => api.post('/Auth/login', { login, password })
 }
@@ -56,4 +47,36 @@ export const referenceApi = {
   getColors: () => api.get('/Reference/colors'),
   getBrands: () => api.get('/Reference/brands'),
   getUsers: () => api.get('/Reference/users')
+}
+
+// ============================================================
+// API методы для каталога
+// ============================================================
+
+export const catalogApi = {
+  // Получить все значки
+  getIcons: () => api.get('/Catalog/icons'),
+  
+  // Получить все наборы/схемы (с фильтрацией)
+  getKits: (type = null, search = null) => {
+    let url = '/Catalog/kits'
+    const params = new URLSearchParams()
+    if (type) params.append('type', type)
+    if (search) params.append('search', search)
+    if (params.toString()) url += '?' + params.toString()
+    return api.get(url)
+  },
+  
+  // Получить Kit по ID
+  getKitById: (id) => api.get(`/Catalog/kits/${id}`),
+  
+  // Получить все нити
+  getThreads: (brand = null, search = null) => {
+    let url = '/Catalog/threads'
+    const params = new URLSearchParams()
+    if (brand) params.append('brand', brand)
+    if (search) params.append('search', search)
+    if (params.toString()) url += '?' + params.toString()
+    return api.get(url)
+  }
 }

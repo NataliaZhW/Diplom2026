@@ -3,9 +3,11 @@ import Login from '../views/Login.vue'
 import Colors from '../views/Colors.vue'
 import Brands from '../views/Brands.vue'
 import Users from '../views/Users.vue'
+import Catalog from '../views/Catalog.vue'
+import Icons from '../views/Icons.vue'
 
 const routes = [
-    {    
+    {
         path: '/login',
         name: 'Login',
         component: Login,
@@ -32,6 +34,18 @@ const routes = [
         name: 'Users',
         component: Users,
         meta: { requiresAuth: true, requiresMaster: true }
+    },
+    {
+        path: '/catalog',
+        name: 'Catalog',
+        component: Catalog,
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/icons',
+        name: 'Icons',
+        component: Icons,
+        meta: { requiresAuth: true }
     }
 ]
 
@@ -40,7 +54,7 @@ const router = createRouter({
     routes
 })
 
-// Guard: проверка авторизации
+// Guard
 router.beforeEach((to, from, next) => {
     const token = localStorage.getItem('token')
     const userRole = localStorage.getItem('userRole')
