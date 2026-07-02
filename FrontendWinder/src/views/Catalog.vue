@@ -2,7 +2,6 @@
     <div class="catalog-container">
         <h1>📋 Каталог</h1>
 
-        <!-- Верхняя панель: переключатели -->
         <div class="toolbar">
             <div class="radio-group">
                 <label class="radio-label">
@@ -31,13 +30,11 @@
             </div>
         </div>
 
-        <!-- Поиск -->
         <div class="search-bar">
             <input type="text" v-model="searchQuery" placeholder="🔍 Поиск по номеру или названию..."
                 class="search-input" />
         </div>
 
-        <!-- Основной контент -->
         <div class="content">
             <!-- Список -->
             <div class="list-panel">
@@ -95,9 +92,9 @@
                     </table>
                 </div>
 
-                <!-- НАБОР: Значок, Код, Название, Метраж, Бирочки -->
+                <!-- НАБОР -->
                 <div v-else-if="catalogType === 'kit'" class="detail-content">
-                    <table class="detail-table">
+                    <table class="kit-table">
                         <thead>
                             <tr>
                                 <th>Значок</th>
@@ -119,9 +116,9 @@
                     </table>
                 </div>
 
-                <!-- СХЕМА: Код, Название, только ненулевые каунты -->
+                <!-- СХЕМА -->
                 <div v-else-if="catalogType === 'scheme'" class="detail-content">
-                    <table class="detail-table">
+                    <table class="scheme-table">
                         <thead>
                             <tr>
                                 <th>Код</th>
@@ -151,7 +148,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { catalogApi } from '../api'
 
-// Состояние
 const catalogType = ref('kit')
 const brandType = ref('dmc')
 const searchQuery = ref('')
@@ -160,7 +156,6 @@ const selectedItem = ref(null)
 const loading = ref(false)
 const error = ref(null)
 
-// Каунты, которые есть в текущей схеме (только непустые)
 const schemeCounts = computed(() => {
     if (!selectedItem.value) return []
 
@@ -174,7 +169,6 @@ const schemeCounts = computed(() => {
     return Array.from(counts).sort((a, b) => a - b)
 })
 
-// Вычисляемые свойства
 const filteredItems = computed(() => {
     if (!searchQuery.value.trim()) return items.value
 
@@ -186,7 +180,6 @@ const filteredItems = computed(() => {
     })
 })
 
-// Методы
 const loadData = async () => {
     loading.value = true
     error.value = null
@@ -213,7 +206,6 @@ const selectItem = (item) => {
     selectedItem.value = item
 }
 
-// Слежение за изменениями
 watch(catalogType, (newVal) => {
     if (newVal === 'kit') {
         brandType.value = 'dmc'
@@ -227,7 +219,6 @@ watch(brandType, (newVal, oldVal) => {
     }
 })
 
-// Инициализация
 onMounted(() => {
     loadData()
 })
@@ -400,16 +391,24 @@ h1 {
     flex: 1;
 }
 
-.detail-table {
-    width: 100%;
+/* ============================================================
+   НАБОР
+   ============================================================ */
+.kit-table {
     border-collapse: collapse;
     font-size: 0.9rem;
 }
 
-.detail-table th {
-    background: #f8f9fa;
-    padding: 0.5rem 0.8rem;
+.kit-table th,
+.kit-table td {
+    padding: 0.4rem 1.2rem;
     text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.kit-table th {
+    background: #f8f9fa;
     font-weight: 600;
     color: #2c3e50;
     border-bottom: 2px solid #e0e0e0;
@@ -418,18 +417,81 @@ h1 {
     z-index: 1;
 }
 
-.detail-table td {
-    padding: 0.4rem 0.8rem;
+.kit-table th:nth-child(4),
+.kit-table td:nth-child(4),
+.kit-table th:nth-child(5),
+.kit-table td:nth-child(5) {
+    text-align: center;
+}
+
+/* ============================================================
+   СХЕМА
+   ============================================================ */
+.scheme-table {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.scheme-table th,
+.scheme-table td {
+    padding: 0.4rem 1rem;
+    text-align: left;
+    white-space: nowrap;
     border-bottom: 1px solid #f0f0f0;
 }
 
-.detail-table tr:hover {
+.scheme-table th {
     background: #f8f9fa;
+    font-weight: 600;
+    color: #2c3e50;
+    border-bottom: 2px solid #e0e0e0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
+.scheme-table th:nth-child(n+3),
+.scheme-table td:nth-child(n+3) {
+    text-align: center;
+}
+
+/* ============================================================
+   НИТЬ
+   ============================================================ */
+.detail-table {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.detail-table th,
+.detail-table td {
+    padding: 0.4rem 1rem;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #2c3e50;
+    border-bottom: 2px solid #e0e0e0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.detail-table th:last-child,
+.detail-table td:last-child {
+    text-align: center;
+}
+
+/* ============================================================
+   ЗНАЧОК
+   ============================================================ */
 .icon-cell {
     font-size: inherit;
-    text-align: left;
+    text-align: center;
 }
 
 .loading,
