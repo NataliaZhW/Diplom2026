@@ -1,8 +1,10 @@
 using BackendWinder.Data;
 using BackendWinder.DTOs;
 using BackendWinder.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace BackendWinder.Controllers;
 
@@ -30,8 +32,6 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Вход в систему
     /// </summary>
-    /// <param name="loginDto">Логин и пароль</param>
-    /// <returns>JWT токен и данные пользователя</returns>
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
     {
@@ -39,25 +39,21 @@ public class AuthController : ControllerBase
         {
             _logger.LogInformation($"Попытка входа: {loginDto.Login}");
 
-            // Ищем пользователя по логину
             var user = await _outsideContext.Users
                 .FirstOrDefaultAsync(u => u.Login == loginDto.Login);
 
-            // Если пользователь не найден
             if (user == null)
             {
                 _logger.LogWarning($"Пользователь не найден: {loginDto.Login}");
                 return Unauthorized(new { message = "Неверный логин или пароль" });
             }
 
-            // Проверяем, активен ли пользователь
             if (!user.IsActive)
             {
                 _logger.LogWarning($"Пользователь заблокирован: {loginDto.Login}");
                 return Unauthorized(new { message = "Пользователь заблокирован" });
             }
 
-            // Проверяем пароль (используем BCrypt)
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginDto.Password, user.PasswordHash);
 
             if (!isPasswordValid)
@@ -66,12 +62,10 @@ public class AuthController : ControllerBase
                 return Unauthorized(new { message = "Неверный логин или пароль" });
             }
 
-            // Генерируем JWT токен
             var token = _jwtService.GenerateToken(user);
 
             _logger.LogInformation($"Успешный вход: {user.Login} ({user.Role})");
 
-            // Возвращаем ответ с токеном
             return Ok(new LoginResponseDto
             {
                 UserId = user.Id,
@@ -85,6 +79,48 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Ошибка при входе: {loginDto.Login}");
+            return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
+        }
+    }
+
+    // ============================================================
+    // ПОЛУЧИТЬ ИНФОРМАЦИЮ О ТЕКУЩЕМ ПОЛЬЗОВАТЕЛЕ
+    // ============================================================
+    /// <summary>
+    /// Получить информацию о текущем пользователе
+    /// </summary>
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetCurrentUser()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null)
+                return Unauthorized(new { message = "Пользователь не авторизован" });
+
+            var userId = int.Parse(userIdClaim.Value);
+
+            var user = await _outsideContext.Users
+                .Where(u => u.Id == userId)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.Login,
+                    u.FullName,
+                    u.Role,
+                    u.IsActive
+                })
+                .FirstOrDefaultAsync();
+
+            if (user == null)
+                return NotFound(new { message = "Пользователь не найден" });
+
+            return Ok(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при получении текущего пользователя");
             return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
         }
     }

@@ -8,6 +8,7 @@
             <router-link to="/brands" class="nav-link">Бренды</router-link>
             <router-link to="/catalog" class="nav-link">Каталог</router-link>
             <router-link to="/icons" class="nav-link">Значки</router-link>
+            <router-link to="/tasks" class="nav-link">Задания</router-link>
             <router-link v-if="authStore.isMaster" to="/users" class="nav-link">
                 Пользователи
             </router-link>

@@ -14,10 +14,12 @@ public class WinderContext : DbContext
     }
 
     public DbSet<BrandManuf> BrandManufs { get; set; }
+    public DbSet<WinderTask> Tasks { get; set; }  // ← WinderTask
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<BrandManuf>().ToTable("BrandManufs");
+        modelBuilder.Entity<WinderTask>().ToTable("Tasks");  // ← WinderTask
     }
 }

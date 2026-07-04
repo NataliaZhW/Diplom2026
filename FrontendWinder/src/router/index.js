@@ -5,6 +5,7 @@ import Brands from '../views/Brands.vue'
 import Users from '../views/Users.vue'
 import Catalog from '../views/Catalog.vue'
 import Icons from '../views/Icons.vue'
+import Tasks from '../views/Tasks.vue'  // ← ДОБАВИТЬ!
 
 const routes = [
     {
@@ -45,6 +46,15 @@ const routes = [
         path: '/icons',
         name: 'Icons',
         component: Icons,
+        meta: { requiresAuth: true }
+    },
+    // ============================================================
+    // ДОБАВЛЯЕМ МАРШРУТ ДЛЯ ЗАДАНИЙ
+    // ============================================================
+    {
+        path: '/tasks',
+        name: 'Tasks',
+        component: Tasks,
         meta: { requiresAuth: true }
     }
 ]

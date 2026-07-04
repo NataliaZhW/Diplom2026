@@ -34,6 +34,7 @@ export const useAuthStore = defineStore('auth', {
                 localStorage.setItem('token', data.token)
                 localStorage.setItem('userRole', data.role)
                 localStorage.setItem('userName', data.fullName)
+                localStorage.setItem('userId', data.userId.toString())
 
                 console.log('4. Успешно!')
                 return { success: true }
