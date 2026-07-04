@@ -13,10 +13,8 @@ import Navbar from './components/Navbar.vue'
 const authStore = useAuthStore()
 
 onMounted(() => {
-  // Проверяем, есть ли сохраненный токен
-  if (localStorage.getItem('token')) {
-    authStore.isAuthenticated = true
-  }
+  // ✅ Восстанавливаем пользователя при загрузке приложения
+  authStore.restoreUser()
 })
 </script>
 

@@ -3,7 +3,7 @@ import Login from '../views/Login.vue'
 import Colors from '../views/Colors.vue'
 import Brands from '../views/Brands.vue'
 import Users from '../views/Users.vue'
-import Catalog from '../views/Catalog.vue'
+import Catalog from '../views/Catalog/Catalog.vue'
 import Icons from '../views/Icons.vue'
 import Tasks from '../views/Tasks.vue'  // ← ДОБАВИТЬ!
 

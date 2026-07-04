@@ -3,7 +3,7 @@ import { authApi } from '../api'
 
 export const useAuthStore = defineStore('auth', {
     state: () => ({
-        user: null,
+        user: JSON.parse(localStorage.getItem('user') || 'null'),
         token: localStorage.getItem('token') || null,
         isAuthenticated: !!localStorage.getItem('token')
     }),
@@ -15,12 +15,8 @@ export const useAuthStore = defineStore('auth', {
     actions: {
         async login(login, password) {
             try {
-                console.log('1. Отправка запроса:', { login, password })
                 const response = await authApi.login(login, password)
-                console.log('2. Ответ:', response)
-
                 const data = response.data
-                console.log('3. Данные:', data)
 
                 this.user = {
                     id: data.userId,
@@ -31,16 +27,16 @@ export const useAuthStore = defineStore('auth', {
                 this.token = data.token
                 this.isAuthenticated = true
 
+                // ✅ Сохраняем ВСЁ в localStorage
                 localStorage.setItem('token', data.token)
                 localStorage.setItem('userRole', data.role)
                 localStorage.setItem('userName', data.fullName)
                 localStorage.setItem('userId', data.userId.toString())
+                localStorage.setItem('user', JSON.stringify(this.user))  // ← ДОБАВИТЬ!
 
-                console.log('4. Успешно!')
                 return { success: true }
             } catch (error) {
                 console.error('ОШИБКА:', error)
-                console.error('error.response:', error.response)
                 return {
                     success: false,
                     message: error.response?.data?.message || 'Ошибка при входе'
@@ -56,6 +52,22 @@ export const useAuthStore = defineStore('auth', {
             localStorage.removeItem('token')
             localStorage.removeItem('userRole')
             localStorage.removeItem('userName')
+            localStorage.removeItem('userId')
+            localStorage.removeItem('user')  // ← ДОБАВИТЬ!
+        },
+
+        // ✅ ДОБАВИТЬ МЕТОД ДЛЯ ВОССТАНОВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ
+        restoreUser() {
+            const userData = localStorage.getItem('user')
+            if (userData) {
+                try {
+                    this.user = JSON.parse(userData)
+                    this.isAuthenticated = true
+                } catch {
+                    this.user = null
+                    this.isAuthenticated = false
+                }
+            }
         }
     }
 })
