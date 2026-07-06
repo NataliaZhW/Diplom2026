@@ -2,6 +2,24 @@
     <div class="tasks-container">
         <h1>📋 Задания</h1>
 
+        <!-- Кнопки для мотальщика (сверху) -->
+        <div v-if="!isMaster" class="action-bar">
+            <button 
+                @click="calculateMaterials" 
+                :disabled="selectedIds.length === 0 || !canCalculate" 
+                class="action-btn primary"
+            >
+                📊 Рассчитать материалы
+            </button>
+            <button 
+                @click="submitReport" 
+                :disabled="selectedIds.length === 0 || !canReport" 
+                class="action-btn success"
+            >
+                📄 В отчет
+            </button>
+        </div>
+
         <!-- Фильтры -->
         <div class="filters">
             <div class="filter-group">
@@ -76,17 +94,116 @@
                         <td>{{ task.winderName }}</td>
                         <td>{{ formatDate(task.createdAt) }}</td>
                         <td>
-                            <select v-if="canChangeStatus(task)" v-model="task.status" @change="updateStatus(task)"
-                                class="status-select">
-                                <option v-for="(label, key) in availableStatuses(task)" :key="key" :value="key">
-                                    {{ label }}
-                                </option>
-                            </select>
-                            <span v-else class="no-action">—</span>
+                            <!-- ============================================================
+                            МАСТЕР / АДМИН
+                            ============================================================ -->
+                            <template v-if="isMaster">
+                                <!-- Сдано → кнопка "Принять" -->
+                                <template v-if="task.status === 'submitted'">
+                                    <button v-if="!task.acceptedAt" @click="acceptTask(task)" class="accept-btn">
+                                        ✅ Принять
+                                    </button>
+                                    <span v-else class="accepted-label"
+                                        @contextmenu.prevent="showContextMenu($event, task.id)">
+                                        ✅ Принято {{ formatDate(task.acceptedAt) }}
+                                    </span>
+                                </template>
+
+                                <!-- Внесено в отчетность → кнопка "Принять" -->
+                                <template v-else-if="task.status === 'reported'">
+                                    <button v-if="!task.acceptedAt" @click="acceptTask(task)" class="accept-btn">
+                                        ✅ Принять
+                                    </button>
+                                    <span v-else class="accepted-label"
+                                        @contextmenu.prevent="showContextMenu($event, task.id)">
+                                        ✅ Принято {{ formatDate(task.acceptedAt) }}
+                                    </span>
+                                </template>
+
+                                <!-- В архиве → кнопка "Принять" -->
+                                <template v-else-if="task.status === 'archived'">
+                                    <button v-if="!task.acceptedAt" @click="acceptTask(task)" class="accept-btn">
+                                        ✅ Принять
+                                    </button>
+                                    <span v-else class="accepted-label"
+                                        @contextmenu.prevent="showContextMenu($event, task.id)">
+                                        ✅ Принято {{ formatDate(task.acceptedAt) }}
+                                    </span>
+                                </template>
+
+                                <!-- Остальные статусы → пусто -->
+                                <span v-else class="no-action">—</span>
+                            </template>
+                            <!-- ============================================================
+                            МОТАЛЬЩИК
+                            ============================================================ -->
+                            <template v-else>
+                                <!-- Новое → чекбокс + надпись "расчет материалов" -->
+                                <template v-if="task.status === 'new'">
+                                    <input
+                                        type="checkbox"
+                                        :value="task.id"
+                                        v-model="selectedIds"
+                                        class="task-checkbox"
+                                    />
+                                    <span class="action-label">расчет материалов</span>
+                                </template>
+
+                                <!-- Сдано → чекбокс + надпись "в отчет" -->
+                                <template v-else-if="task.status === 'submitted'">
+                                    <input
+                                        type="checkbox"
+                                        :value="task.id"
+                                        v-model="selectedIds"
+                                        class="task-checkbox"
+                                    />
+                                    <span class="action-label">в отчет</span>
+                                </template>
+
+                                <!-- Пошаговое переключение: кнопка со следующим статусом -->
+                                <template v-else-if="canChangeStatus(task)">
+                                    <button @click="showStatusConfirm(task)" class="status-btn">
+                                        {{ getNextStatusLabel(task) }}
+                                    </button>
+                                </template>
+
+                                <!-- Остальные статусы → пусто -->
+                                <span v-else class="no-action">—</span>
+                            </template>
                         </td>
                     </tr>
                 </tbody>
             </table>
+
+<!-- Модалка подтверждения -->
+<div v-if="confirmModalVisible" class="modal-overlay" @click.self="cancelConfirm">
+    <div class="modal-content">
+        <h3>Подтверждение</h3>
+        <p v-if="confirmAction === 'status'">
+            Перевести задание <strong>{{ confirmTask?.itemName }}</strong> 
+            в статус <strong>{{ getNextStatusLabel(confirmTask) }}</strong>?
+        </p>
+        <p v-else-if="confirmAction === 'accept'">
+            Принять задание <strong>{{ confirmTask?.itemName }}</strong>?
+        </p>
+        <div class="modal-actions">
+            <button @click="cancelConfirm" class="cancel-btn">Отмена</button>
+            <button @click="confirmStatusChange" class="save-btn">ОК</button>
+        </div>
+    </div>
+</div>
+            <!-- Контекстное меню для отмены принятия -->
+            <div v-if="contextMenuVisible" 
+                    class="context-menu" 
+                    :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }"
+                    @click.stop>
+                <div class="context-item" @click="cancelAccept">
+                    ↩️ Отменить принятие
+                </div>
+                <div class="context-item" @click="closeContextMenu">
+                    ❌ Отмена
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -97,7 +214,6 @@ import { useAuthStore } from '../store/auth'
 import api from '../api'
 
 const authStore = useAuthStore()
-console.log(authStore.user?.role)
 const isMaster = authStore.isMaster
 const currentUserId = ref(null)
 
@@ -109,33 +225,45 @@ const tasks = ref([])
 const winders = ref([])
 const loading = ref(false)
 const error = ref(null)
+const selectedIds = ref([])
 
-// Фильтры
+const contextMenuVisible = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuTaskId = ref(null)
+
 const filterStatus = ref('')
 const filterType = ref('')
 const filterWinder = ref('')
 
-// Статусы
+// ============================================================
+// МОДАЛКА ПОДТВЕРЖДЕНИЯ
+// ============================================================
+
+const confirmModalVisible = ref(false)
+const confirmTask = ref(null)
+const confirmAction = ref(null) // 'status' или 'accept'
+
+// ============================================================
+// СТАТУСЫ
+// ============================================================
+
 const statusLabels = {
     new: 'Новое',
-    planned: 'Запланировано',
     materials_requested: 'Материалы запрошены',
-    materials_issued: 'Материалы выданы',
-    in_progress: 'В работе',
-    completed: 'Сдано',
-    accepted: 'Принято',
+    materials_received: 'Материалы получены',
+    submitted: 'Сдано',
+    reported: 'Внесено в отчетность',
     archived: 'В архиве'
 }
 
-// Следующие статусы (для выпадающего списка)
+// ✅ Пошаговые переходы (для мотальщика)
 const statusFlow = {
-    new: ['planned'],
-    planned: ['materials_requested'],
-    materials_requested: ['materials_issued'],
-    materials_issued: ['in_progress'],
-    in_progress: ['completed'],
-    completed: ['accepted'],
-    accepted: ['archived'],
+    materials_requested: ['materials_received'],
+    materials_received: ['submitted'],
+    reported: ['archived'],
+    new: [],
+    submitted: [],
     archived: []
 }
 
@@ -163,6 +291,18 @@ const filteredTasks = computed(() => {
     }
 
     return result
+})
+
+const canCalculate = computed(() => {
+    if (selectedIds.value.length === 0) return false
+    const selectedTasks = tasks.value.filter(t => selectedIds.value.includes(t.id))
+    return selectedTasks.every(t => t.status === 'new')
+})
+
+const canReport = computed(() => {
+    if (selectedIds.value.length === 0) return false
+    const selectedTasks = tasks.value.filter(t => selectedIds.value.includes(t.id))
+    return selectedTasks.every(t => t.status === 'submitted')
 })
 
 // ============================================================
@@ -202,21 +342,21 @@ const formatDate = (dateString) => {
 const getStatusClass = (status) => {
     const classes = {
         new: 'status-new',
-        planned: 'status-planned',
         materials_requested: 'status-requested',
-        materials_issued: 'status-issued',
-        in_progress: 'status-progress',
-        completed: 'status-completed',
-        accepted: 'status-accepted',
+        materials_received: 'status-issued',
+        submitted: 'status-completed',
+        reported: 'status-reported',
         archived: 'status-archived'
     }
     return classes[status] || ''
 }
 
 const canChangeStatus = (task) => {
-    // Мастер может менять статус у всех, мотальщик — только у своих
-    if (isMaster) return true
-    return task.winderId === currentUserId.value
+    // Только для мотальщика и только для статусов, у которых есть переходы
+    if (isMaster) return false
+    if (task.winderId !== currentUserId.value) return false
+    const nextStatuses = statusFlow[task.status] || []
+    return nextStatuses.length > 0
 }
 
 const availableStatuses = (task) => {
@@ -228,34 +368,184 @@ const availableStatuses = (task) => {
     return result
 }
 
-const updateStatus = async (task) => {
+// const updateStatus = async (task) => {
+
+//     console.log('=== updateStatus ===')
+//     console.log('task.id:', task.id)
+//     console.log('task.status (новый):', task.status)
+//     console.log('Отправляем:', { status: task.status })
+
+//     try {
+//         await api.put(`/Tasks/${task.id}/status`, { status: task.status })
+//         const now = new Date().toISOString()
+//         switch (task.status) {
+//             case 'materials_received':
+//                 task.materialsIssuedAt = now
+//                 break
+//             case 'submitted':
+//                 task.SubmittedAt = now
+//                 break
+//             case 'reported':
+//                 task.ReportedAt = now
+//                 break
+//             case 'archived':
+//                 task.ArchivedAt = now
+//                 break
+//         }
+//         alert('✅ Статус обновлён')
+//     } catch (err) {
+//         console.error('Ошибка обновления статуса:', err)
+//         alert('❌ Ошибка при обновлении статуса')
+//         await loadTasks()
+//     }
+// }
+
+const acceptTask = async (task) => {
     try {
-        await api.put(`/Tasks/${task.id}/status`, { status: task.status })
-        // Обновляем дату в соответствии со статусом
+        const response = await api.post(`/Tasks/${task.id}/accept`)
+        const acceptedDate = response.data.acceptedAt
+        
+        // ✅ МАСТЕР ВСЕГДА ЗАПИСЫВАЕТ ТОЛЬКО В acceptedAt
+        task.acceptedAt = acceptedDate
+        
+        alert('✅ Задание принято')
+    } catch (err) {
+        alert('❌ ' + (err.response?.data?.message || 'Ошибка'))
+    }
+}
+
+const cancelAccept = async () => {
+    if (!contextMenuTaskId.value) return
+    
+    try {
+        await api.post(`/Tasks/${contextMenuTaskId.value}/cancel-accept`)
+        const task = tasks.value.find(t => t.id === contextMenuTaskId.value)
+        
+        if (task) {
+            // ✅ МАСТЕР ВСЕГДА ОЧИЩАЕТ ТОЛЬКО acceptedAt
+            task.acceptedAt = null
+        }
+        
+        alert('✅ Принятие отменено')
+    } catch (err) {
+        alert('❌ ' + (err.response?.data?.message || 'Ошибка'))
+    } finally {
+        closeContextMenu()
+    }
+}
+
+const calculateMaterials = async () => {
+    if (selectedIds.value.length === 0) {
+        alert('Выберите задания в статусе "Новое"')
+        return
+    }
+
+    try {
+        const response = await api.post('/Tasks/batch/calculate-materials', selectedIds.value)
+        alert(`✅ ${response.data.message}`)
+        selectedIds.value = []
+        await loadTasks()
+    } catch (err) {
+        alert('❌ ' + (err.response?.data?.message || 'Ошибка'))
+    }
+}
+
+const submitReport = async () => {
+    if (selectedIds.value.length === 0) {
+        alert('Выберите задания в статусе "Сдано"')
+        return
+    }
+
+    try {
+        const response = await api.post('/Tasks/batch/submit-report', selectedIds.value)
+        alert(`✅ ${response.data.message}`)
+        selectedIds.value = []
+        await loadTasks()
+    } catch (err) {
+        alert('❌ ' + (err.response?.data?.message || 'Ошибка'))
+    }
+}
+
+const showContextMenu = (event, taskId) => {
+    contextMenuX.value = event.clientX
+    contextMenuY.value = event.clientY
+    contextMenuTaskId.value = taskId
+    contextMenuVisible.value = true
+}
+
+const closeContextMenu = () => {
+    contextMenuVisible.value = false
+    contextMenuTaskId.value = null
+}
+
+document.addEventListener('click', () => {
+    if (contextMenuVisible.value) closeContextMenu()
+})
+
+// ============================================================
+// МЕТОДЫ ДЛЯ КНОПОК СТАТУСОВ
+// ============================================================
+
+const getNextStatusLabel = (task) => {
+    const nextStatuses = statusFlow[task.status] || []
+    if (nextStatuses.length === 0) return ''
+    const nextKey = nextStatuses[0]
+    return statusLabels[nextKey] || nextKey
+}
+
+const showStatusConfirm = (task) => {
+    confirmTask.value = task
+    confirmAction.value = 'status'
+    confirmModalVisible.value = true
+}
+
+const confirmStatusChange = async () => {
+    if (!confirmTask.value) return
+    
+    const task = confirmTask.value
+    const nextStatuses = statusFlow[task.status] || []
+    if (nextStatuses.length === 0) return
+    
+    const newStatus = nextStatuses[0]
+    
+    try {
+        await api.put(`/Tasks/${task.id}/status`, { status: newStatus })
+        
+        // Обновляем локальное состояние
+        task.status = newStatus
         const now = new Date().toISOString()
-        switch (task.status) {
-            case 'planned':
-                task.assignedAt = now
-                break
-            case 'materials_issued':
+        switch (newStatus) {
+            case 'materials_received':
                 task.materialsIssuedAt = now
                 break
-            case 'completed':
-                task.completedAt = now
+            case 'submitted':
+                task.SubmittedAt = now
                 break
-            case 'accepted':
-                task.acceptedAt = now
+            case 'reported':
+                task.ReportedAt = now
                 break
             case 'archived':
-                task.archivedAt = now
+                task.ArchivedAt = now
                 break
         }
+        
+        confirmModalVisible.value = false
+        confirmTask.value = null
+        
+        // Спрашиваем, обновить ли страницу
+        // if (confirm('✅ Статус обновлён.')) {
+            await loadTasks()
+        // }
     } catch (err) {
         console.error('Ошибка обновления статуса:', err)
-        alert('Ошибка при обновлении статуса')
-        // Перезагружаем задания
-        await loadTasks()
+        alert('❌ Ошибка при обновлении статуса: ' + (err.response?.data?.message || err.message))
     }
+}
+
+const cancelConfirm = () => {
+    confirmModalVisible.value = false
+    confirmTask.value = null
+    confirmAction.value = null
 }
 
 // ============================================================
@@ -263,21 +553,23 @@ const updateStatus = async (task) => {
 // ============================================================
 
 onMounted(async () => {
-    // Получаем ID текущего пользователя из токена
     try {
         const userInfo = await api.get('/Auth/me')
         currentUserId.value = userInfo.data.id
     } catch {
-        // Если нет эндпоинта /me, используем данные из store
         currentUserId.value = authStore.user?.id || null
     }
 
-    await loadWinders()
+    if (isMaster) { await loadWinders() }
     await loadTasks()
 })
 </script>
 
 <style scoped>
+/* ============================================================
+   ОСНОВНЫЕ СТИЛИ
+   ============================================================ */
+
 .tasks-container {
     padding: 2rem;
     max-width: 1400px;
@@ -290,7 +582,51 @@ h1 {
 }
 
 /* ============================================================
-   Фильтры
+   КНОПКИ ДЕЙСТВИЙ (для мотальщика)
+   ============================================================ */
+
+.action-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.action-btn {
+    padding: 0.5rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.action-btn.primary {
+    background: #3498db;
+    color: white;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+    background: #2980b9;
+}
+
+.action-btn.success {
+    background: #2ecc71;
+    color: white;
+}
+
+.action-btn.success:hover:not(:disabled) {
+    background: #27ae60;
+}
+
+/* ============================================================
+   ФИЛЬТРЫ
    ============================================================ */
 
 .filters {
@@ -349,7 +685,7 @@ h1 {
 }
 
 /* ============================================================
-   Таблица
+   ТАБЛИЦА
    ============================================================ */
 
 .table-container {
@@ -389,7 +725,7 @@ h1 {
 }
 
 /* ============================================================
-   Статусы
+   СТАТУСЫ
    ============================================================ */
 
 .status-badge {
@@ -406,11 +742,6 @@ h1 {
     color: #1976d2;
 }
 
-.status-planned {
-    background: #fff3e0;
-    color: #e65100;
-}
-
 .status-requested {
     background: #fce4ec;
     color: #c62828;
@@ -421,19 +752,14 @@ h1 {
     color: #6a1b9a;
 }
 
-.status-progress {
-    background: #e8f5e9;
-    color: #2e7d32;
-}
-
 .status-completed {
     background: #e0f7fa;
     color: #00838f;
 }
 
-.status-accepted {
-    background: #e8eaf6;
-    color: #283593;
+.status-reported {
+    background: #f39c12;
+    color: white;
 }
 
 .status-archived {
@@ -442,8 +768,30 @@ h1 {
 }
 
 /* ============================================================
-   Выпадающий список статусов
+   ДЕЙСТВИЯ
    ============================================================ */
+
+.accept-btn {
+    background: #2ecc71;
+    color: white;
+    border: none;
+    padding: 0.2rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background 0.2s;
+}
+
+.accept-btn:hover {
+    background: #27ae60;
+}
+
+.accepted-label {
+    color: #2ecc71;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: context-menu;
+}
 
 .status-select {
     padding: 0.15rem 0.4rem;
@@ -459,8 +807,46 @@ h1 {
     font-size: 0.8rem;
 }
 
+/* Чекбокс + надпись */
+.task-checkbox {
+    margin-right: 0.4rem;
+    cursor: pointer;
+}
+
+.action-label {
+    font-size: 0.75rem;
+    color: #555;
+    cursor: default;
+}
+
 /* ============================================================
-   Состояния
+   КОНТЕКСТНОЕ МЕНЮ
+   ============================================================ */
+
+.context-menu {
+    position: fixed;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding: 0.3rem 0;
+    min-width: 180px;
+    z-index: 1000;
+    border: 1px solid #e0e0e0;
+}
+
+.context-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.1s;
+}
+
+.context-item:hover {
+    background: #f0f0f0;
+}
+
+/* ============================================================
+   СОСТОЯНИЯ
    ============================================================ */
 
 .loading,
@@ -479,8 +865,94 @@ h1 {
     color: #999;
 }
 
+.status-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 0.2rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: background 0.2s;
+}
+
+.status-btn:hover {
+    background: #2980b9;
+}
+
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    min-width: 300px;
+    max-width: 400px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h3 {
+    margin-bottom: 0.8rem;
+    color: #2c3e50;
+}
+
+.modal-content p {
+    margin-bottom: 1.2rem;
+    color: #555;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.modal-content p strong {
+    color: #2c3e50;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.8rem;
+    justify-content: flex-end;
+}
+
+.modal-actions button {
+    padding: 0.4rem 1.2rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.save-btn {
+    background: #28a745;
+    color: white;
+}
+
+.save-btn:hover {
+    background: #218838;
+}
+
+.cancel-btn {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.cancel-btn:hover {
+    background: #d0d0d0;
+}
+
 /* ============================================================
-   Адаптивность
+   АДАПТИВНОСТЬ
    ============================================================ */
 
 @media (max-width: 1200px) {
@@ -506,6 +978,10 @@ h1 {
 
     .refresh-btn {
         margin-left: 0;
+    }
+
+    .action-bar {
+        flex-direction: column;
     }
 }
 </style>

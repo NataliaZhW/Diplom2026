@@ -21,9 +21,13 @@ public class TaskDto
     public string? AssignedByName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? AssignedAt { get; set; }
+    public DateTime? MaterialsRequestedAt { get; set; }
     public DateTime? MaterialsIssuedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime? AcceptedAt { get; set; }
     public DateTime? ArchivedAt { get; set; }
     public string? Note { get; set; }
+
+    public DateTime? SubmittedAt { get; set; }
+    public DateTime? ReportedAt { get; set; }
 }

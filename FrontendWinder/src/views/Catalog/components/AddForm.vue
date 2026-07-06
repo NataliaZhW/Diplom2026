@@ -36,6 +36,7 @@
 </template>
 
 <script setup>
+
 const props = defineProps({
     selectedItem: Object,
     catalogType: String,

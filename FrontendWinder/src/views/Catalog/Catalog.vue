@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useCatalog } from './composables/useCatalog'
 import { useSelected } from './composables/useSelected'
 import { referenceApi } from '../../api'
@@ -77,6 +77,17 @@ const currentUserName = ref(localStorage.getItem('userName') || 'Пользов�
 // Мотальщики
 const winders = ref([])
 const selectedWinderId = ref(null)
+
+// ============================================================
+// СЛЕДИМ ЗА СМЕНОЙ МОТАЛЬЩИКА
+// ============================================================
+
+watch(selectedWinderId, (newVal) => {
+    // Обновляем winderId у всех выбранных элементов
+    selectedItems.value.forEach(item => {
+        item.winderId = newVal
+    })
+})
 
 // ============================================================
 // МЕТОДЫ

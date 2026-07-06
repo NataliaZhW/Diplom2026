@@ -3,9 +3,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BackendWinder.Models.Winder;
 
-/// <summary>
-/// Модель задания (из таблицы Tasks в db-winder)
-/// </summary>
 [Table("Tasks")]
 public class WinderTask
 {
@@ -49,14 +46,20 @@ public class WinderTask
     [Column("assigned_at")]
     public DateTime? AssignedAt { get; set; }
 
+    [Column("materials_requested_at")]
+    public DateTime? MaterialsRequestedAt { get; set; }
+
     [Column("materials_issued_at")]
     public DateTime? MaterialsIssuedAt { get; set; }
 
-    [Column("completed_at")]
-    public DateTime? CompletedAt { get; set; }
+    [Column("submitted_at")]
+    public DateTime? SubmittedAt { get; set; }
 
     [Column("accepted_at")]
     public DateTime? AcceptedAt { get; set; }
+
+    [Column("reported_at")]
+    public DateTime? ReportedAt { get; set; }
 
     [Column("archived_at")]
     public DateTime? ArchivedAt { get; set; }

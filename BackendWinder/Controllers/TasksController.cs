@@ -21,12 +21,10 @@ public class TasksController : ControllerBase
     private static readonly Dictionary<string, string> StatusLabels = new()
     {
         { "new", "Новое" },
-        { "planned", "Запланировано" },
         { "materials_requested", "Материалы запрошены" },
-        { "materials_issued", "Материалы выданы" },
-        { "in_progress", "В работе" },
-        { "completed", "Сдано" },
-        { "accepted", "Принято" },
+        { "materials_received", "Материалы получены" },
+        { "submitted", "Сдано" },
+        { "reported", "Внесено в отчетность" },
         { "archived", "В архиве" }
     };
 
@@ -47,9 +45,6 @@ public class TasksController : ControllerBase
         _logger = logger;
     }
 
-    // ============================================================
-    // 1. Получить все задания
-    // ============================================================
     [HttpGet]
     public async Task<IActionResult> GetTasks()
     {
@@ -101,9 +96,11 @@ public class TasksController : ControllerBase
             WinderName = userNames.GetValueOrDefault(t.WinderId, "Неизвестно"),
             CreatedAt = t.CreatedAt,
             AssignedAt = t.AssignedAt,
+            MaterialsRequestedAt =t.MaterialsRequestedAt,
             MaterialsIssuedAt = t.MaterialsIssuedAt,
-            CompletedAt = t.CompletedAt,
+            SubmittedAt = t.SubmittedAt,
             AcceptedAt = t.AcceptedAt,
+            ReportedAt = t.ReportedAt,
             ArchivedAt = t.ArchivedAt,
             Note = t.Note
         }).ToList();
@@ -111,9 +108,6 @@ public class TasksController : ControllerBase
         return Ok(result);
     }
 
-    // ============================================================
-    // 2. Получить задание по ID
-    // ============================================================
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTaskById(int id)
     {
@@ -156,9 +150,11 @@ public class TasksController : ControllerBase
             WinderName = winderName,
             CreatedAt = task.CreatedAt,
             AssignedAt = task.AssignedAt,
+            MaterialsRequestedAt = task.MaterialsRequestedAt,
             MaterialsIssuedAt = task.MaterialsIssuedAt,
-            CompletedAt = task.CompletedAt,
+            SubmittedAt = task.SubmittedAt,
             AcceptedAt = task.AcceptedAt,
+            ReportedAt = task.ReportedAt,
             ArchivedAt = task.ArchivedAt,
             Note = task.Note
         };
@@ -166,9 +162,6 @@ public class TasksController : ControllerBase
         return Ok(result);
     }
 
-    // ============================================================
-    // 3. Создать задание
-    // ============================================================
     [HttpPost]
     public async Task<IActionResult> CreateTask([FromBody] TaskCreateDto dto)
     {
@@ -203,9 +196,6 @@ public class TasksController : ControllerBase
         return Ok(new { id = task.Id, message = "Задание создано" });
     }
 
-    // ============================================================
-    // 4. Обновить статус задания
-    // ============================================================
     [HttpPut("{id}/status")]
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] TaskStatusUpdateDto dto)
     {
@@ -219,21 +209,27 @@ public class TasksController : ControllerBase
         if (userRole != "master" && task.WinderId != userId)
             return Forbid();
 
+    // ✅ ПРОВЕРЯЕМ, ЧТО СТАТУС ВООБЩЕ СУЩЕСТВУЕТ
+    var validStatuses = new[] { "new", "materials_requested", "materials_received", "submitted", "reported", "archived" };
+    if (!validStatuses.Contains(dto.Status))
+        return BadRequest(new { message = "Недопустимый статус" });
+
         task.Status = dto.Status;
 
         switch (dto.Status)
         {
-            case "planned":
-                task.AssignedAt = DateTime.UtcNow;
+            
+            case "materials_requested":
+                task.MaterialsRequestedAt = DateTime.UtcNow;
                 break;
-            case "materials_issued":
+            case "materials_received":
                 task.MaterialsIssuedAt = DateTime.UtcNow;
                 break;
-            case "completed":
-                task.CompletedAt = DateTime.UtcNow;
+            case "submitted":
+                task.SubmittedAt = DateTime.UtcNow;
                 break;
-            case "accepted":
-                task.AcceptedAt = DateTime.UtcNow;
+            case "reported":
+                task.ReportedAt = DateTime.UtcNow;
                 break;
             case "archived":
                 task.ArchivedAt = DateTime.UtcNow;
@@ -247,9 +243,6 @@ public class TasksController : ControllerBase
         return Ok(new { message = "Статус обновлён" });
     }
 
-    // ============================================================
-    // 5. Удалить задание (только new)
-    // ============================================================
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTask(int id)
     {
@@ -272,9 +265,6 @@ public class TasksController : ControllerBase
         return Ok(new { message = "Задание удалено" });
     }
 
-    // ============================================================
-    // 6. Массовое создание заданий из списка "Выбрано"
-    // ============================================================
     [HttpPost("batch")]
     public async Task<IActionResult> CreateBatchTasks([FromBody] List<TaskCreateDto> items)
     {
@@ -284,7 +274,6 @@ public class TasksController : ControllerBase
         var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
         var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "winder";
 
-        // Проверка прав
         if (userRole != "master")
         {
             var hasOtherWinder = items.Any(item => item.WinderId != userId);
@@ -295,7 +284,6 @@ public class TasksController : ControllerBase
             }
         }
 
-        // Валидация каждого элемента
         foreach (var dto in items)
         {
             var validationContext = new ValidationContext(dto);
@@ -341,4 +329,160 @@ public class TasksController : ControllerBase
             taskIds = createdTasks
         });
     }
+
+    // ============================================================
+    // 7. Принять задание (только для мастера)
+    // ============================================================
+    [HttpPost("{id}/accept")]
+    public async Task<IActionResult> AcceptTask(int id)
+    {
+        try
+        {
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "winder";
+
+            if (userRole != "master")
+                return Forbid();
+
+            var task = await _winderContext.Tasks.FindAsync(id);
+            if (task == null)
+                return NotFound(new { message = "Задание не найдено" });
+
+            if (task.Status != "submitted" && task.Status != "reported" && task.Status != "archived")
+                return BadRequest(new { message = "Можно принять только задания в статусе 'Сдано', 'Внесено в отчетность' или 'В архиве'" });
+
+            if (task.AcceptedAt != null)
+                return BadRequest(new { message = "Задание уже принято" });
+
+            task.AcceptedAt = DateTime.UtcNow;
+
+            await _winderContext.SaveChangesAsync();
+
+            _logger.LogInformation($"Задание {id} принято мастером {User.Identity?.Name}");
+
+            return Ok(new
+            {
+                message = "Задание принято",
+                acceptedAt = task.AcceptedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Ошибка при принятии задания {id}");
+            return StatusCode(500, new { message = "Внутренняя ошибка сервера" });
+        }
+    }
+
+    [HttpPost("{id}/cancel-accept")]
+    public async Task<IActionResult> CancelAccept(int id)
+    {
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "winder";
+        if (userRole != "master")
+            return Forbid();
+
+        var task = await _winderContext.Tasks.FindAsync(id);
+        if (task == null)
+            return NotFound(new { message = "Задание не найдено" });
+
+        if (task.AcceptedAt == null)
+            return BadRequest(new { message = "Задание ещё не принято" });
+
+        task.AcceptedAt = null;
+        await _winderContext.SaveChangesAsync();
+
+        return Ok(new { message = "Принятие отменено" });
+    }
+
+    // ============================================================
+    // 8. Массовый перевод заданий в статус "materials_requested"
+    // ============================================================
+    [HttpPost("batch/calculate-materials")]
+    public async Task<IActionResult> CalculateMaterials([FromBody] List<int> taskIds)
+    {
+        if (taskIds == null || taskIds.Count == 0)
+            return BadRequest(new { message = "Выберите задания" });
+
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "winder";
+
+        // Только мотальщик может использовать эту функцию
+        if (userRole == "master")
+            return Forbid();
+
+        var tasks = await _winderContext.Tasks
+            .Where(t => taskIds.Contains(t.Id))
+            .ToListAsync();
+
+        if (tasks.Count == 0)
+            return NotFound(new { message = "Задания не найдены" });
+
+        // Проверка: можно переводить только "new"
+        var invalidTasks = tasks.Where(t => t.Status != "new").ToList();
+        if (invalidTasks.Any())
+        {
+            return BadRequest(new
+            {
+                message = $"Задания {string.Join(", ", invalidTasks.Select(t => t.Id))} не в статусе 'Новое'"
+            });
+        }
+
+        foreach (var task in tasks)
+        {
+            task.Status = "materials_requested";
+            task.MaterialsRequestedAt = DateTime.UtcNow;
+        }
+
+        await _winderContext.SaveChangesAsync();
+
+        _logger.LogInformation($"Переведено {tasks.Count} заданий в 'Материалы запрошены' пользователем {userId}");
+
+        return Ok(new { message = $"Переведено {tasks.Count} заданий в статус 'Материалы запрошены'" });
+    }
+
+    // ============================================================
+    // 9. Массовый перевод заданий в статус "reported"
+    // ============================================================
+    [HttpPost("batch/submit-report")]
+    public async Task<IActionResult> SubmitReport([FromBody] List<int> taskIds)
+    {
+        if (taskIds == null || taskIds.Count == 0)
+            return BadRequest(new { message = "Выберите задания" });
+
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "winder";
+
+        // Только мотальщик может использовать эту функцию
+        if (userRole == "master")
+            return Forbid();
+
+        var tasks = await _winderContext.Tasks
+            .Where(t => taskIds.Contains(t.Id))
+            .ToListAsync();
+
+        if (tasks.Count == 0)
+            return NotFound(new { message = "Задания не найдены" });
+
+        // Проверка: можно переводить только "submitted"
+        var invalidTasks = tasks.Where(t => t.Status != "submitted").ToList();
+        if (invalidTasks.Any())
+        {
+            return BadRequest(new
+            {
+                message = $"Задания {string.Join(", ", invalidTasks.Select(t => t.Id))} не в статусе 'Сдано'"
+            });
+        }
+
+        foreach (var task in tasks)
+        {
+            task.Status = "reported";
+            task.ReportedAt = DateTime.UtcNow;
+        }
+
+        await _winderContext.SaveChangesAsync();
+
+        _logger.LogInformation($"Переведено {tasks.Count} заданий в 'Внесено в отчетность' пользователем {userId}");
+
+        return Ok(new { message = $"Переведено {tasks.Count} заданий в статус 'Внесено в отчетность'" });
+    }
+
+
 }
