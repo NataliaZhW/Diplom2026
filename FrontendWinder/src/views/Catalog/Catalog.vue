@@ -10,7 +10,7 @@
         <div class="content">
             <ItemList :title="catalogType === 'kit' ? 'Наборы' : catalogType === 'scheme' ? 'Схемы' : 'Нити'"
                 :items="filteredItems" :selected-item="selectedItem" :loading="loading" :error="error"
-                @select="selectItem" />
+                @select="handleSelectItem" />
 
             <ItemDetail :selected-item="selectedItem" :catalog-type="catalogType" :brand-type="brandType"
                 :scheme-counts="schemeCounts" />
@@ -99,6 +99,16 @@ const handleSubmit = async () => {
     if (result) {
         // При успешном внесении можно обновить что-то
     }
+}
+
+// ============================================================
+// ОБЁРТКА ДЛЯ selectItem
+// ============================================================
+
+const handleSelectItem = (item) => {
+    selectItem(item, (count) => {
+        selectedCount.value = count
+    })
 }
 
 // ============================================================

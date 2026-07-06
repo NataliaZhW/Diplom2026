@@ -71,7 +71,7 @@ router.beforeEach((to, from, next) => {
 
     if (to.meta.requiresAuth && !token) {
         next('/login')
-    } else if (to.meta.requiresMaster && userRole !== 'Master') {
+    } else if (to.meta.requiresMaster && userRole !== 'master') {
         next('/colors')
     } else {
         next()

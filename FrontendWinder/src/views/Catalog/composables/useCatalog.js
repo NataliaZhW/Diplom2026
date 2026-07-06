@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { catalogApi } from '../../../api'
 import { BUSINESS_RULES } from '../../../config'
 
@@ -55,8 +55,14 @@ export function useCatalog() {
         }
     }
 
-    const selectItem = (item) => {
+    const selectItem = (item, setSelectedCount) => {
         selectedItem.value = item
+        // Ждём, пока Vue обновит computed
+        nextTick(() => {
+            if (catalogType.value === 'scheme' && schemeCounts.value.length > 0) {
+                setSelectedCount(schemeCounts.value[0])
+            }
+        })
     }
 
     watch(catalogType, (newVal) => {
