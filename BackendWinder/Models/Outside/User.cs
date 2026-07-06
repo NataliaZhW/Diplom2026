@@ -1,11 +1,9 @@
+using BackendWinder.Models.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BackendWinder.Models.Outside;
 
-/// <summary>
-/// Модель пользователя (из таблицы Users в db-outside)
-/// </summary>
 [Table("Users")]
 public class User
 {
@@ -24,6 +22,19 @@ public class User
 
     [Column("role")]
     public string Role { get; set; } = "winder";
+
+    // СВОЙСТВО ДЛЯ ENUM
+    [NotMapped]
+    public UserRole RoleEnum
+    {
+        get => Role.ToLower() switch
+        {
+            "master" => UserRole.Master,
+            "admin" => UserRole.Admin,
+            _ => UserRole.Winder
+        };
+        set => Role = value.ToString().ToLower();
+    }
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;

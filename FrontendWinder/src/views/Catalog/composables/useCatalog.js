@@ -1,5 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { catalogApi } from '../../../api'
+import { BUSINESS_RULES } from '../../../config'
 
 export function useCatalog() {
     const catalogType = ref('kit')
@@ -13,8 +14,9 @@ export function useCatalog() {
     const schemeCounts = computed(() => {
         if (!selectedItem.value || catalogType.value !== 'scheme') return []
         const counts = new Set()
+        const allCounts = BUSINESS_RULES.AVAILABLE_COUNTS
         selectedItem.value.compositions?.forEach(comp => {
-            [252, 272, 283, 282, 302, 322, 362, 401].forEach(count => {
+            allCounts.forEach(count => {
                 const key = 'count' + count
                 if (comp[key] > 0) counts.add(count)
             })

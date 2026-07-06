@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using BackendWinder.Services.Interfaces;
+using BackendWinder.Filters;
+using BackendWinder.Models.Config;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,7 +59,17 @@ builder.Services.AddAuthorization();
 // 3. Регистрация своих сервисов
 // ============================================================
 
-builder.Services.AddScoped<JwtService>();
+// Регистрация бизнес-правил
+var businessRules = builder.Configuration.GetSection("BusinessRules").Get<BusinessRulesConfig>()
+    ?? new BusinessRulesConfig();  // ← если null, создаём новый объект
+
+builder.Services.AddSingleton(businessRules);
+
+//builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<IReferenceService, ReferenceService>();
 
 // ============================================================
 // 4. Настройка CORS (разрешаем запросы с фронтенда)
@@ -76,7 +89,10 @@ builder.Services.AddCors(options =>
 // 5. Настройка контроллеров и Swagger
 // ============================================================
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<GlobalExceptionFilter>();
+});
 
 // Настройка Swagger с поддержкой JWT
 builder.Services.AddEndpointsApiExplorer();

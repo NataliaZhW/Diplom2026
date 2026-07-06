@@ -11,6 +11,7 @@ import { useAuthStore } from './store/auth'
 import Navbar from './components/Navbar.vue'
 
 const authStore = useAuthStore()
+console.log(authStore.user?.role)
 
 onMounted(() => {
   // ✅ Восстанавливаем пользователя при загрузке приложения

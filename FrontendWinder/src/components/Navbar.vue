@@ -31,6 +31,7 @@ import { useAuthStore } from '../store/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
+console.log(authStore.user?.role)
 
 const logout = () => {
     authStore.logout()

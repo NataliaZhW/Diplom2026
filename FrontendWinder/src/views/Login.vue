@@ -44,6 +44,7 @@ import { useAuthStore } from '../store/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
+console.log(authStore.user?.role)
 
 const login = ref('')
 const password = ref('')

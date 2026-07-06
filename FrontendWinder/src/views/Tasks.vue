@@ -97,6 +97,7 @@ import { useAuthStore } from '../store/auth'
 import api from '../api'
 
 const authStore = useAuthStore()
+console.log(authStore.user?.role)
 const isMaster = authStore.isMaster
 const currentUserId = ref(null)
 

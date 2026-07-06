@@ -1,46 +1,36 @@
 import { defineStore } from 'pinia'
-import { authApi } from '../api'
+import { authService } from '../services/authService'
+import { ROLES } from '../config/roles'
 
 export const useAuthStore = defineStore('auth', {
     state: () => ({
-        user: JSON.parse(localStorage.getItem('user') || 'null'),
+        user: authService.restoreUser(),
         token: localStorage.getItem('token') || null,
         isAuthenticated: !!localStorage.getItem('token')
     }),
 
     getters: {
-        isMaster: (state) => state.user?.role === 'master'
+        isMaster: (state) => state.user?.role === ROLES.MASTER
     },
 
     actions: {
         async login(login, password) {
-            try {
-                const response = await authApi.login(login, password)
-                const data = response.data
+            const result = await authService.login(login, password)
 
-                this.user = {
-                    id: data.userId,
-                    login: data.login,
-                    fullName: data.fullName,
-                    role: data.role
-                }
-                this.token = data.token
+            if (result.success) {
+                this.user = result.data
+                this.token = result.data.token
                 this.isAuthenticated = true
+                authService.saveUserData(result.data)
 
-                // ✅ Сохраняем ВСЁ в localStorage
-                localStorage.setItem('token', data.token)
-                localStorage.setItem('userRole', data.role)
-                localStorage.setItem('userName', data.fullName)
-                localStorage.setItem('userId', data.userId.toString())
-                localStorage.setItem('user', JSON.stringify(this.user))  // ← ДОБАВИТЬ!
-
+                console.log('Роль пользователя:', this.user?.role)
+                
                 return { success: true }
-            } catch (error) {
-                console.error('ОШИБКА:', error)
-                return {
-                    success: false,
-                    message: error.response?.data?.message || 'Ошибка при входе'
-                }
+            }
+
+            return {
+                success: false,
+                message: result.message
             }
         },
 
@@ -48,25 +38,14 @@ export const useAuthStore = defineStore('auth', {
             this.user = null
             this.token = null
             this.isAuthenticated = false
-
-            localStorage.removeItem('token')
-            localStorage.removeItem('userRole')
-            localStorage.removeItem('userName')
-            localStorage.removeItem('userId')
-            localStorage.removeItem('user')  // ← ДОБАВИТЬ!
+            authService.clearUserData()
         },
 
-        // ✅ ДОБАВИТЬ МЕТОД ДЛЯ ВОССТАНОВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ
         restoreUser() {
-            const userData = localStorage.getItem('user')
+            const userData = authService.restoreUser()
             if (userData) {
-                try {
-                    this.user = JSON.parse(userData)
-                    this.isAuthenticated = true
-                } catch {
-                    this.user = null
-                    this.isAuthenticated = false
-                }
+                this.user = userData
+                this.isAuthenticated = true
             }
         }
     }
