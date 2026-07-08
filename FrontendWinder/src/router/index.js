@@ -5,7 +5,7 @@ import Brands from '../views/Brands.vue'
 import Users from '../views/Users.vue'
 import Catalog from '../views/Catalog/Catalog.vue'
 import Icons from '../views/Icons.vue'
-import Tasks from '../views/Tasks.vue'  // ← ДОБАВИТЬ!
+import Tasks from '../views/Tasks/Tasks.vue'  
 
 const routes = [
     {

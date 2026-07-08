@@ -70,6 +70,7 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<IReferenceService, ReferenceService>();
+builder.Services.AddScoped<ITaskService, TaskService>();
 
 // ============================================================
 // 4. Настройка CORS (разрешаем запросы с фронтенда)
